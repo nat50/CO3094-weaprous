@@ -116,12 +116,29 @@ class Request():
             #
             #  TODO: implement the cookie function here
             #        by parsing the header            #
-
+        
+        body_raw = ""
+        if '\r\n\r\n' in request:
+            _, body_raw = request.split('\r\n\r\n', 1)
+        content_type = self.headers.get('content-type', '')
+        if 'application/json' in content_type:
+            # JSON body
+            self.prepare_body(data=None, files=None, json=body_raw)
+        elif 'multipart/form-data' in content_type:
+            # File upload
+            self.prepare_body(data=None, files=body_raw, json=None)
+        else:
+            # Form data (login)
+            self.prepare_body(data=body_raw, files=None, json=None)            
         return
 
     def prepare_body(self, data, files, json=None):
+        if data is not None:
+            self.body = data 
+        else:
+            self.body = ""
+        
         self.prepare_content_length(self.body)
-        self.body = body
         #
         # TODO prepare the request authentication
         #
@@ -130,7 +147,10 @@ class Request():
 
 
     def prepare_content_length(self, body):
-        self.headers["Content-Length"] = "0"
+        if body:
+            self.headers["Content-Length"] = str(len(body))
+        else:
+            self.headers["Content-Length"] = "0"
         #
         # TODO prepare the request authentication
         #

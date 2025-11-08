@@ -161,7 +161,10 @@ class Response():
             else:
                 handle_text_other(sub_type)
         elif main_type == 'image':
-            base_dir = BASE_DIR+"static/"
+            if sub_type == 'x-icon':
+                base_dir = BASE_DIR+"static/images"
+            else:
+                base_dir = BASE_DIR+"static/"
             self.headers['Content-Type']='image/{}'.format(sub_type)
         elif main_type == 'application':
             base_dir = BASE_DIR+"apps/"
@@ -201,6 +204,8 @@ class Response():
             #  TODO: implement the step of fetch the object file
             #        store in the return value of content
             #
+        with open(filepath, 'rb') as f:
+            content = f.read()
         return len(content), content
 
 
@@ -224,7 +229,7 @@ class Response():
                 "Cache-Control": "no-cache",
                 "Content-Type": "{}".format(self.headers['Content-Type']),
                 "Content-Length": "{}".format(len(self._content)),
-#                "Cookie": "{}".format(reqhdr.get("Cookie", "sessionid=xyz789")), #dummy cooki
+                #"Cookie": "{}".format(reqhdr.get("Cookie", "sessionid=xyz789")), #dummy cooki
         #
         # TODO prepare the request authentication
         #
@@ -246,6 +251,13 @@ class Response():
         # TODO prepare the request authentication
         #
 	# self.auth = ...
+        status_line = "{} {} {}".format(request.version, self.status_code, self.reason)
+        header_lines = [status_line]
+        
+        for key, value in headers.items():
+            header_lines.append("{}: {}".format(key, value))
+        header_lines.append("Connection: close")
+        fmt_header = "\r\n".join(header_lines) + "\r\n\r\n"
         return str(fmt_header).encode('utf-8')
 
 
@@ -267,6 +279,16 @@ class Response():
                 "404 Not Found"
             ).encode('utf-8')
 
+    def check_login(self, info):
+        login_info = CaseInsensitiveDict()
+        if info:
+            for pair in info.split('&'):
+                if '=' in pair:
+                    key, val = pair.split('=', 1)
+                    login_info[key] = val
+        username = login_info.get('username', '')
+        password = login_info.get('password', '')
+        return username == 'admin' and password == 'password'
 
     def build_response(self, request):
         """
@@ -292,10 +314,25 @@ class Response():
         #
         # TODO: add support objects
         #
+        elif mime_type.startswith('image/'):
+            base_dir = self.prepare_content_type(mime_type = mime_type)
+        elif path == '/login':
+            if request.method == 'GET':
+                path = '/login.html'
+                base_dir = self.prepare_content_type(mime_type = 'text/html')
+            elif request.method == 'POST':
+                if not self.check_login(request.body):
+                    return self.build_notfound()
+                else:
+                    path = '/index.html'
+                    base_dir = self.prepare_content_type(mime_type = 'text/html')
         else:
             return self.build_notfound()
 
         c_len, self._content = self.build_content(path, base_dir)
+        # Set status
+        self.status_code = 200
+        self.reason = 'OK'
         self._header = self.build_response_header(request)
 
         return self._header + self._content
