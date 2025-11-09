@@ -116,6 +116,13 @@ class Request():
             #
             #  TODO: implement the cookie function here
             #        by parsing the header            #
+        self.cookies = CaseInsensitiveDict()
+        if cookies:
+            for pair in cookies.split(";"):
+                pair = pair.strip()
+                if '=' in pair:
+                    key, value = pair.split("=", 1)
+                    self.cookies[key] = value
         
         body_raw = ""
         if '\r\n\r\n' in request:

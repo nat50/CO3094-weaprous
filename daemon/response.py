@@ -229,7 +229,7 @@ class Response():
                 "Cache-Control": "no-cache",
                 "Content-Type": "{}".format(self.headers['Content-Type']),
                 "Content-Length": "{}".format(len(self._content)),
-                #"Cookie": "{}".format(reqhdr.get("Cookie", "sessionid=xyz789")), #dummy cooki
+                # "Set-Cookie": "{}".format(rsphdr.get("Set-Cookie", "")),
         #
         # TODO prepare the request authentication
         #
@@ -250,6 +250,8 @@ class Response():
         #
         # TODO prepare the request authentication
         #
+        if rsphdr.get("Set-Cookie"):
+            headers["Set-Cookie"] = rsphdr.get("Set-Cookie")
 	# self.auth = ...
         status_line = "{} {} {}".format(request.version, self.status_code, self.reason)
         header_lines = [status_line]
@@ -278,6 +280,22 @@ class Response():
                 "\r\n"
                 "404 Not Found"
             ).encode('utf-8')
+        
+    def build_unauthorized(self):
+        """
+        Constructs a 401 Unauthorized response.
+        
+        :rtype bytes: Encoded 401 response.
+        """
+        return (
+            "HTTP/1.1 401 Unauthorized\r\n"
+            "Content-Type: text/html\r\n"
+            "Content-Length: 17\r\n"
+            "Cache-Control: no-store\r\n"
+            "Connection: close\r\n"
+            "\r\n"
+            "401 Unauthorized"
+        ).encode('utf-8')
 
     def check_login(self, info):
         login_info = CaseInsensitiveDict()
@@ -305,10 +323,26 @@ class Response():
         print("[Response] {} path {} mime_type {}".format(request.method, request.path, mime_type))
 
         base_dir = ""
-
+        
+        if path == '/login':
+            if request.method == 'GET':
+                path = '/login.html'
+                base_dir = self.prepare_content_type(mime_type = 'text/html')
+            elif request.method == 'POST':
+                if not self.check_login(request.body):
+                    return self.build_unauthorized()
+                else:
+                    path = '/index.html'
+                    base_dir = self.prepare_content_type(mime_type = 'text/html')
+                    self.cookies['auth'] = 'true'
+                    self.headers['Set-Cookie'] = 'auth=true; Path=/; HttpOnly'           
         #If HTML, parse and serve embedded objects
-        if path.endswith('.html') or mime_type == 'text/html':
-            base_dir = self.prepare_content_type(mime_type = 'text/html')
+        elif path.endswith('.html') or mime_type == 'text/html':
+            cookies = request.cookies
+            if cookies.get('auth', '')=='true':
+                base_dir = self.prepare_content_type(mime_type = 'text/html')
+            else:
+                return self.build_unauthorized()
         elif mime_type == 'text/css':
             base_dir = self.prepare_content_type(mime_type = 'text/css')
         #
@@ -316,16 +350,6 @@ class Response():
         #
         elif mime_type.startswith('image/'):
             base_dir = self.prepare_content_type(mime_type = mime_type)
-        elif path == '/login':
-            if request.method == 'GET':
-                path = '/login.html'
-                base_dir = self.prepare_content_type(mime_type = 'text/html')
-            elif request.method == 'POST':
-                if not self.check_login(request.body):
-                    return self.build_notfound()
-                else:
-                    path = '/index.html'
-                    base_dir = self.prepare_content_type(mime_type = 'text/html')
         else:
             return self.build_notfound()
 
