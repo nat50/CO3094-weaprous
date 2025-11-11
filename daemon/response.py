@@ -252,6 +252,7 @@ class Response():
         #
         if rsphdr.get("Set-Cookie"):
             headers["Set-Cookie"] = rsphdr.get("Set-Cookie")
+        
 	# self.auth = ...
         status_line = "{} {} {}".format(request.version, self.status_code, self.reason)
         header_lines = [status_line]
@@ -296,6 +297,19 @@ class Response():
             "\r\n"
             "401 Unauthorized"
         ).encode('utf-8')
+        
+    def build_found(self):
+        """
+        return Found if login is successful
+        """
+        return (
+            "HTTP/1.1 302 Found\r\n"
+            "Location: /\r\n"
+            "Set-Cookie: auth=true; Path=/; HttpOnly\r\n"
+            "Content-Length: 0\r\n"
+            "Connection: close\r\n"
+            "\r\n"
+        ).encode('utf-8')
 
     def check_login(self, info):
         login_info = CaseInsensitiveDict()
@@ -324,6 +338,7 @@ class Response():
 
         base_dir = ""
         
+        login = False
         if path == '/login':
             if request.method == 'GET':
                 path = '/login.html'
@@ -332,10 +347,7 @@ class Response():
                 if not self.check_login(request.body):
                     return self.build_unauthorized()
                 else:
-                    path = '/index.html'
-                    base_dir = self.prepare_content_type(mime_type = 'text/html')
-                    self.cookies['auth'] = 'true'
-                    self.headers['Set-Cookie'] = 'auth=true; Path=/; HttpOnly'           
+                    return self.build_found()
         #If HTML, parse and serve embedded objects
         elif path.endswith('.html') or mime_type == 'text/html':
             cookies = request.cookies
