@@ -23,3 +23,4 @@ def create_sampleapp():
         except json.JSONDecodeError:
             return {"error": "Invalid JSON"}
 
+    return app

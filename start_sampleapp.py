@@ -46,6 +46,7 @@ def login(headers="guest", body="anonymous"):
     :param body (str): The request body or login payload.
     """
     print ("[SampleApp] Logging in {} to {}".format(headers, body))
+    return("okela")
 
 @app.route('/hello', methods=['PUT'])
 def hello(headers, body):
@@ -65,7 +66,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='Backend', description='', epilog='Beckend daemon')
     parser.add_argument('--server-ip', default='0.0.0.0')
     parser.add_argument('--server-port', type=int, default=PORT)
- 
+
     args = parser.parse_args()
     ip = args.server_ip
     port = args.server_port

@@ -109,11 +109,13 @@ class HttpAdapter:
         # Handle request hook
         if req.hook:
             print("[HttpAdapter] hook in route-path METHOD {} PATH {}".format(req.hook._route_path,req.hook._route_methods))
-            # req.hook(headers = "bksysnet",body = "get in touch")
+            # result=req.hook(headers = "bksysnet",body = "get in touch")
             #
             # TODO: handle for App hook here
             #
-
+            result=req.hook(headers=req.headers, body=req.body)
+            print(f"this is result: {result}")
+            resp.result = result
         # Build response
         response = resp.build_response(req)
 
@@ -131,7 +133,7 @@ class HttpAdapter:
         :rtype: cookies - A dictionary of cookie key-value pairs.
         """
         cookies = {}
-        for header in headers:
+        for header in req.headers:
             if header.startswith("Cookie:"):
                 cookie_str = header.split(":", 1)[1].strip()
                 for pair in cookie_str.split(";"):

@@ -117,7 +117,7 @@ class Response():
         #: The :class:`PreparedRequest <PreparedRequest>` object to which this
         #: is a response.
         self.request = None
-
+        self.result = None
 
     def get_mime_type(self, path):
         """
@@ -322,6 +322,17 @@ class Response():
         password = login_info.get('password', '')
         return username == 'admin' and password == 'password'
 
+    def build_app_response(self, request):
+        """
+        Build response for app routes with hook result.
+        """
+        self._content = self.result.encode('utf-8')
+        self.status_code = 200
+        self.reason = 'OK'
+        self.headers['Content-Type'] = 'application/json'
+        self._header = self.build_response_header(request)
+        return self._header + self._content
+
     def build_response(self, request):
         """
         Builds a full HTTP response including headers and content based on the request.
@@ -338,7 +349,9 @@ class Response():
 
         base_dir = ""
         
-        login = False
+        if self.result:
+            return self.build_app_response(request)
+        
         if path == '/login':
             if request.method == 'GET':
                 path = '/login.html'
@@ -350,11 +363,15 @@ class Response():
                     return self.build_found()
         #If HTML, parse and serve embedded objects
         elif path.endswith('.html') or mime_type == 'text/html':
-            cookies = request.cookies
-            if cookies.get('auth', '')=='true':
-                base_dir = self.prepare_content_type(mime_type = 'text/html')
+            if request.routes:
+                base_dir = "wwwapp/"
+                self.headers['Content-Type'] = 'text/html'
             else:
-                return self.build_unauthorized()
+                cookies = request.cookies
+                if cookies.get('auth', '')=='true':
+                    base_dir = self.prepare_content_type(mime_type = 'text/html')
+                else:
+                    return self.build_unauthorized()
         elif mime_type == 'text/css':
             base_dir = self.prepare_content_type(mime_type = 'text/css')
         #

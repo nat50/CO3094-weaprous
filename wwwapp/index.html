@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>P2P Chat</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="/css/styles.css" />
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            display: flex;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 200px;
+            min-width: 200px;
+            background: #f5f5f5;
+            border-right: 1px solid #ddd;
+            padding: 10px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar h2 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+        }
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            overflow: hidden;
+        }
+        .header {
+            background: #38488f;
+            color: white;
+            padding: 15px;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        .messages {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            background: #fafafa;
+            min-height: 0;
+        }
+        .input-area {
+            padding: 15px;
+            background: white;
+            border-top: 1px solid #ddd;
+            display: flex;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+        .input-area input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .input-area button {
+            padding: 8px 20px;
+            background: #38488f;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .peer-item {
+            padding: 10px;
+            margin: 5px 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .peer-item:hover {
+            background: #e0e0e0;
+        }
+        .peer-item.active {
+            background: #38488f;
+            color: white;
+        }
+        .broadcast-btn {
+            background: #4CAF50;
+            color: white;
+            padding: 10px;
+            margin: 5px 0;
+            text-align: center;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 4px;
+        }
+        .empty {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            color: #999;
+        }
+        .msg {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 8px;
+            max-width: 70%;
+            word-wrap: break-word;
+        }
+        .msg.own {
+            background: #e3f2fd;
+            margin-left: auto;
+            text-align: right;
+        }
+        .msg.other {
+            background: white;
+            border: 1px solid #ddd;
+        }
+        #peerList {
+            flex: 1;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>Peers</h2>
+        <div class="broadcast-btn" onclick="selectBroadcast()">📢 Broadcast</div>
+        <div id="peerList">Loading...</div>
+    </div>
+    
+    <div class="main">
+        <div class="header" id="header" style="display:none;">
+            Chat with: <span id="currentPeerName"></span>
+        </div>
+        <div class="empty" id="empty">Select a peer to start chatting</div>
+        <div class="messages" id="messages" style="display:none;"></div>
+        <div class="input-area" id="inputArea" style="display:none;">
+            <input type="text" id="messageInput" placeholder="Type message..." onkeypress="if(event.key==='Enter') sendMessage()">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <script>
+        var currentPeer = null;
+        var myPeerId = null;
+
+        function callAPI(url, method, data, callback) {
+            var xhr = new XMLHttpRequest();
+            xhr.open(method, window.location.origin + url, true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    var result = JSON.parse(xhr.responseText);
+                    callback(result);
+                } else if (xhr.readyState === 4) {
+                    callback(null);
+                }
+            };
+            
+            if (data) {
+                xhr.send(JSON.stringify(data));
+            } else {
+                xhr.send();
+            }
+        }
+
+        function loadPeers() {
+            callAPI('/api/peers', 'GET', null, function(result) {
+                var html = '';
+                if (result && result.peers && result.peers.length > 0) {
+                    for (var i = 0; i < result.peers.length; i++) {
+                        var peer = result.peers[i];
+                        html += '<div class="peer-item" onclick="selectPeer(' + peer.peer_id + ')">Peer ' + peer.peer_id + '</div>';
+                    }
+                } else {
+                    html = '<div>No peers</div>';
+                }
+                document.getElementById('peerList').innerHTML = html;
+                restoreSelection();
+                refreshPeerHighlight();
+            });
+        }
+
+        function restoreSelection() {
+            if (currentPeer) return;
+            var savedPeer = localStorage.getItem('currentPeer');
+            if (savedPeer) {
+                if (savedPeer === 'broadcast') {
+                    currentPeer = 'broadcast';
+                    showChat('Broadcast');
+                } else {
+                    var peerId = parseInt(savedPeer);
+                    var allPeers = document.querySelectorAll('.peer-item');
+                    var exists = false;
+                    for (var i = 0; i < allPeers.length; i++) {
+                        if (allPeers[i].textContent.includes('Peer ' + peerId)) {
+                            exists = true;
+                            break;
+                        }
+                    }
+                    if (exists) {
+                        currentPeer = peerId;
+                        showChat('Peer ' + peerId);
+                    } else {
+                        localStorage.removeItem('currentPeer');
+                    }
+                }
+            }
+        }
+
+        function refreshPeerHighlight() {
+            if (!currentPeer) return;
+            var allPeers = document.querySelectorAll('.peer-item');
+            for (var i = 0; i < allPeers.length; i++) {
+                allPeers[i].classList.remove('active');
+            }
+            if (currentPeer === 'broadcast') {
+                document.querySelector('.broadcast-btn').style.background = '#45a049';
+            } else {
+                for (var i = 0; i < allPeers.length; i++) {
+                    if (allPeers[i].textContent.includes('Peer ' + currentPeer)) {
+                        allPeers[i].classList.add('active');
+                    }
+                }
+            }
+        }
+
+        function selectBroadcast() {
+            currentPeer = 'broadcast';
+            localStorage.setItem('currentPeer', 'broadcast');
+            showChat('Broadcast');
+        }
+
+        function selectPeer(peerId) {
+            currentPeer = parseInt(peerId);
+            localStorage.setItem('currentPeer', peerId);
+            showChat('Peer ' + peerId);
+        }
+
+        function showChat(peerName) {
+            document.getElementById('currentPeerName').textContent = peerName;
+            document.getElementById('header').style.display = 'block';
+            document.getElementById('empty').style.display = 'none';
+            document.getElementById('messages').style.display = 'block';
+            document.getElementById('inputArea').style.display = 'block';
+            refreshPeerHighlight();
+            loadMessages();
+        }
+
+        function loadMessages() {
+            if (!currentPeer) return;
+            if (currentPeer === 'broadcast') {
+                callAPI('/api/messages', 'GET', null, function(result) {
+                    displayMessages(result);
+                });
+            } else {
+                callAPI('/api/chat', 'POST', {peer_id: currentPeer}, function(result) {
+                    displayMessages(result);
+                });
+            }
+        }
+
+        function displayMessages(result) {
+            var messagesDiv = document.getElementById('messages');
+            var html = '';
+            if (result && result.messages && result.messages.length > 0) {
+                for (var i = 0; i < result.messages.length; i++) {
+                    var msg = result.messages[i];
+                    var time = new Date(msg.timestamp).toLocaleTimeString();
+                    var isOwn = msg.from == myPeerId;
+                    var cls = isOwn ? 'own' : 'other';
+                    html += '<div class="msg ' + cls + '"><strong>Peer ' + msg.from + '</strong> [' + time + ']<br>' + msg.data + '</div>';
+                }
+            } else {
+                html = '<div style="text-align:center;color:#999;padding:20px;">No messages yet</div>';
+            }
+            messagesDiv.innerHTML = html;
+            setTimeout(function() {
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }, 10);
+        }
+
+        function sendMessage() {
+            if (!currentPeer) {
+                var savedPeer = localStorage.getItem('currentPeer');
+                if (savedPeer) {
+                    if (savedPeer === 'broadcast') {
+                        currentPeer = 'broadcast';
+                    } else {
+                        currentPeer = parseInt(savedPeer);
+                    }
+                    showChat(savedPeer === 'broadcast' ? 'Broadcast' : 'Peer ' + currentPeer);
+                } else {
+                    alert('Please select a peer first');
+                    return;
+                }
+            }
+            
+            var message = document.getElementById('messageInput').value.trim();
+            if (message === '') return;
+            
+            var data = {message: message};
+            if (currentPeer !== 'broadcast') {
+                data.target_peer_id = currentPeer;
+            }
+            
+            callAPI('/api/send', 'POST', data, function(result) {
+                if (result && result.status === 'success') {
+                    document.getElementById('messageInput').value = '';
+                    setTimeout(function() {
+                        loadMessages();
+                    }, 50);
+                } else {
+                    alert('Failed to send');
+                }
+            });
+        }
+
+        function getMyPeerId() {
+            callAPI('/api/me', 'GET', null, function(result) {
+                if (result) {
+                    myPeerId = result.peer_id;
+                }
+            });
+        }
+
+        function init() {
+            getMyPeerId();
+            loadPeers();
+            setInterval(loadPeers, 5000);
+            setInterval(function() {
+                if (currentPeer) {
+                    loadMessages();
+                }
+            }, 2000);
+        }
+
+        init();
+    </script>
+</body>
+</html>
