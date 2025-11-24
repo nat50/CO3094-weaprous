@@ -3,7 +3,6 @@
 <head>
     <title>P2P Chat</title>
     <meta charset="utf-8" />
-    <link rel="stylesheet" href="/css/styles.css" />
     <style>
         * {
             box-sizing: border-box;
@@ -154,16 +153,16 @@
             var xhr = new XMLHttpRequest();
             xhr.open(method, window.location.origin + url, true);
             xhr.setRequestHeader('Content-Type', 'application/json');
-            
             xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4 && xhr.status === 200) {
-                    var result = JSON.parse(xhr.responseText);
-                    callback(result);
-                } else if (xhr.readyState === 4) {
-                    callback(null);
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        var result = JSON.parse(xhr.responseText);
+                        callback(result);
+                    } else {
+                        callback(null);
+                    }
                 }
             };
-            
             if (data) {
                 xhr.send(JSON.stringify(data));
             } else {
@@ -256,31 +255,38 @@
 
         function loadMessages() {
             if (!currentPeer) return;
+
             if (currentPeer === 'broadcast') {
-                callAPI('/api/messages', 'GET', null, function(result) {
-                    displayMessages(result);
-                });
-            } else {
-                callAPI('/api/chat', 'POST', {peer_id: currentPeer}, function(result) {
-                    displayMessages(result);
-                });
+                var messagesDiv = document.getElementById('messages');
+                messagesDiv.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">Chat to everyone</div>';
+                return;
             }
+
+            callAPI('/api/chat', 'POST', {peer_id: currentPeer}, function(result) {
+                displayMessages(result);
+            });
         }
 
         function displayMessages(result) {
             var messagesDiv = document.getElementById('messages');
             var html = '';
+
             if (result && result.messages && result.messages.length > 0) {
                 for (var i = 0; i < result.messages.length; i++) {
                     var msg = result.messages[i];
                     var time = new Date(msg.timestamp).toLocaleTimeString();
-                    var isOwn = msg.from == myPeerId;
+
+                    var msgFrom = parseInt(msg.from);
+                    var myId = parseInt(myPeerId);
+                    var isOwn = (msgFrom === myId);
+
                     var cls = isOwn ? 'own' : 'other';
                     html += '<div class="msg ' + cls + '"><strong>Peer ' + msg.from + '</strong> [' + time + ']<br>' + msg.data + '</div>';
                 }
             } else {
                 html = '<div style="text-align:center;color:#999;padding:20px;">No messages yet</div>';
             }
+    
             messagesDiv.innerHTML = html;
             setTimeout(function() {
                 messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -302,21 +308,21 @@
                     return;
                 }
             }
-            
+
             var message = document.getElementById('messageInput').value.trim();
             if (message === '') return;
-            
+
             var data = {message: message};
             if (currentPeer !== 'broadcast') {
                 data.target_peer_id = currentPeer;
             }
-            
+
             callAPI('/api/send', 'POST', data, function(result) {
                 if (result && result.status === 'success') {
                     document.getElementById('messageInput').value = '';
                     setTimeout(function() {
                         loadMessages();
-                    }, 50);
+                    }, 200);
                 } else {
                     alert('Failed to send');
                 }
@@ -326,20 +332,23 @@
         function getMyPeerId() {
             callAPI('/api/me', 'GET', null, function(result) {
                 if (result) {
-                    myPeerId = result.peer_id;
+                    myPeerId = parseInt(result.peer_id);
                 }
             });
         }
 
         function init() {
             getMyPeerId();
-            loadPeers();
-            setInterval(loadPeers, 5000);
-            setInterval(function() {
-                if (currentPeer) {
-                    loadMessages();
-                }
-            }, 2000);
+
+            setTimeout(function() {
+                loadPeers();
+                setInterval(loadPeers, 5000);
+                setInterval(function() {
+                    if (currentPeer) {
+                        loadMessages();
+                    }
+                }, 2000);
+            }, 100);
         }
 
         init();

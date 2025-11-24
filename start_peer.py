@@ -1,5 +1,6 @@
 import argparse
 from apps.peer_app import app, register_with_tracker
+import json
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -18,5 +19,11 @@ if __name__ == "__main__":
     }
     
     app.prepare_address(args.peer_ip, args.peer_port)
+    response = register_with_tracker(args.peer_ip, args.peer_port)
+    _, body = response.split('\r\n\r\n', 1)
+    result = json.loads(body)
+    if result.get('status') == 'success':
+        peer_id = result.get('peer_id')
+        app.config['peer_id'] = peer_id
     app.run()
 

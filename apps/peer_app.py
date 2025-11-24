@@ -8,7 +8,9 @@ app = WeApRous()
 app.config = {}
 
 def get_chat_key(peer_id1, peer_id2):
-    return f"{min(peer_id1, peer_id2)}_{max(peer_id1, peer_id2)}"
+    id1 = int(peer_id1)
+    id2 = int(peer_id2)
+    return f"{min(id1, id2)}_{max(id1, id2)}"
 
 def save_message(chat_key, from_peer_id, message, timestamp):
     if chat_key not in messages:
@@ -74,14 +76,6 @@ def send_to_peer(peer_ip, peer_port, message_data):
 @app.route('/', methods=['GET'])
 @app.route('/index.html', methods=['GET'])
 def serve_index(headers, body):
-    peer_ip = app.config.get('peer_ip')
-    peer_port = app.config.get('peer_port')
-    response = register_with_tracker(peer_ip, peer_port)
-    _, body = response.split('\r\n\r\n', 1)
-    result = json.loads(body)
-    if result.get('status') == 'success':
-        peer_id = result.get('peer_id')
-        app.config['peer_id'] = peer_id
     return None
 
 @app.route('/api/me', methods=['GET'])
@@ -99,19 +93,6 @@ def api_peers(headers, body):
     all_peers = get_peer_list()
     filtered_peers = [p for p in all_peers if p.get('peer_id') != peer_id]
     return json.dumps({'status': 'success', 'peers': filtered_peers})
-
-@app.route('/api/messages', methods=['GET'])
-def api_messages(headers, body):
-    all_messages = []
-    seen = set()
-    for chat_key, peer_msgs in messages.items():
-        for msg in peer_msgs:
-            msg_key = (msg['from'], msg['data'], msg['timestamp'])
-            if msg_key not in seen:
-                seen.add(msg_key)
-                all_messages.append(msg)
-    all_messages.sort(key=lambda x: x.get('timestamp', ''))
-    return json.dumps({'status': 'success', 'messages': all_messages})
 
 @app.route('/api/chat', methods=['POST'])
 def api_chat_messages(headers, body):
@@ -137,9 +118,6 @@ def api_send(headers, body):
     target_peer_id = data.get('target_peer_id')
     peer_id = app.config.get('peer_id')
     
-    if not peer_id or not message:
-        return json.dumps({'status': 'error', 'message': 'Peer not registered or message required'})
-    
     peer_id = int(peer_id)
     if target_peer_id is not None:
         target_peer_id = int(target_peer_id)
@@ -150,20 +128,24 @@ def api_send(headers, body):
         'timestamp': datetime.now().isoformat()
     }
     
-    peers = get_peer_list()
     timestamp = msg_data['timestamp']
     
     if target_peer_id is not None:
+        # Direct Message
         chat_key = get_chat_key(peer_id, target_peer_id)
         save_message(chat_key, peer_id, message, timestamp)
+
+        peers = get_peer_list()
         if target_peer_id != peer_id:
             for peer in peers:
-                if peer['peer_id'] == target_peer_id:
+                if peer.get('peer_id') == target_peer_id:
                     send_to_peer(peer['ip'], peer['port'], msg_data)
                     break
     else:
+        # Broadcast
+        peers = get_peer_list()
         for peer in peers:
-            if peer['peer_id'] != peer_id:
+            if peer.get('peer_id') != peer_id:
                 chat_key = get_chat_key(peer_id, peer['peer_id'])
                 save_message(chat_key, peer_id, message, timestamp)
                 send_to_peer(peer['ip'], peer['port'], msg_data)
@@ -174,8 +156,6 @@ def api_send(headers, body):
 def receive_message(headers, body):
     data = json.loads(body)
     peer_id = app.config.get('peer_id')
-    if peer_id is None:
-        return json.dumps({'status': 'error', 'message': 'Peer not registered'})
     
     peer_id = int(peer_id)
     from_peer_id = int(data['from'])

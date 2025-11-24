@@ -12,7 +12,7 @@ def submit_info(headers, body):
         return json.dumps({'status': 'error'})
     
     # Auto-assign peer_id as index
-    peer_id = len(active_peers)
+    peer_id = len(active_peers) + 1
     
     active_peers[peer_id] = {
         'ip': data['ip'],
