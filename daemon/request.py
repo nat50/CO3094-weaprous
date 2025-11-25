@@ -95,27 +95,13 @@ class Request():
         # Prepare the request line from the request header
         self.method, self.path, self.version = self.extract_request_line(request)
         print("[Request] {} path {} version {}".format(self.method, self.path, self.version))
-
-        #
-        # @bksysnet Preapring the webapp hook with WeApRous instance
-        # The default behaviour with HTTP server is empty routed
-        #
-        # TODO manage the webapp hook in this mounting point
-        #
         
         if not routes == {}:
             self.routes = routes
             self.hook = routes.get((self.method, self.path))
-            #
-            # self.hook manipulation goes here
-            # ...
-            #
 
         self.headers = self.prepare_headers(request)
         cookies = self.headers.get('cookie', '')
-            #
-            #  TODO: implement the cookie function here
-            #        by parsing the header            #
         self.cookies = CaseInsensitiveDict()
         if cookies:
             for pair in cookies.split(";"):
@@ -123,6 +109,9 @@ class Request():
                 if '=' in pair:
                     key, value = pair.split("=", 1)
                     self.cookies[key] = value
+            print("[Request] Cookies: {}".format(dict(self.cookies)))
+        else:
+            print("[Request] No cookies found")
         
         body_raw = ""
         if '\r\n\r\n' in request:

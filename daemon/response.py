@@ -169,18 +169,6 @@ class Response():
         elif main_type == 'application':
             base_dir = BASE_DIR+"apps/"
             self.headers['Content-Type']='application/{}'.format(sub_type)
-        #
-        #  TODO: process other mime_type
-        #        application/xml       
-        #        application/zip
-        #        ...
-        #        text/csv
-        #        text/xml
-        #        ...
-        #        video/mp4 
-        #        video/mpeg
-        #        ...
-        #
         else:
             raise ValueError("Invalid MEME type: main_type={} sub_type={}".format(main_type,sub_type))
 
@@ -198,12 +186,8 @@ class Response():
         """
 
         filepath = os.path.join(base_dir, path.lstrip('/'))
-
         print("[Response] serving the object at location {}".format(filepath))
-            #
-            #  TODO: implement the step of fetch the object file
-            #        store in the return value of content
-            #
+        
         with open(filepath, 'rb') as f:
             content = f.read()
         return len(content), content
@@ -270,7 +254,7 @@ class Response():
 
         :rtype bytes: Encoded 404 response.
         """
-
+        print("[Response] Sending 404 Not Found")
         return (
                 "HTTP/1.1 404 Not Found\r\n"
                 "Accept-Ranges: bytes\r\n"
@@ -288,6 +272,7 @@ class Response():
         
         :rtype bytes: Encoded 401 response.
         """
+        print("[Response] Sending 401 Unauthorized")
         return (
             "HTTP/1.1 401 Unauthorized\r\n"
             "Content-Type: text/html\r\n"
@@ -302,6 +287,7 @@ class Response():
         """
         return Found if login is successful
         """
+        print("[Response] Sending 302 Found (Login successful)")
         return (
             "HTTP/1.1 302 Found\r\n"
             "Location: /\r\n"
@@ -387,5 +373,6 @@ class Response():
         self.status_code = 200
         self.reason = 'OK'
         self._header = self.build_response_header(request)
+        print("[Response] Sending 200 OK")
 
         return self._header + self._content

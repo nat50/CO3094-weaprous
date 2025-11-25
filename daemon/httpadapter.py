@@ -104,22 +104,18 @@ class HttpAdapter:
 
         # Handle the request
         msg = conn.recv(1024).decode()
+        print("[HttpAdapter] Client connection from {}:{}".format(addr[0], addr[1]))
         req.prepare(msg, routes)
 
         # Handle request hook
         if req.hook:
             print("[HttpAdapter] hook in route-path METHOD {} PATH {}".format(req.hook._route_path,req.hook._route_methods))
-            # result=req.hook(headers = "bksysnet",body = "get in touch")
-            #
-            # TODO: handle for App hook here
-            #
             result=req.hook(headers=req.headers, body=req.body)
             print(f"this is result: {result}")
             resp.result = result
+
         # Build response
         response = resp.build_response(req)
-
-        #print(response)
         conn.sendall(response)
         conn.close()
 
