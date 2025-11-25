@@ -75,6 +75,7 @@ def run_backend(ip, port, routes):
     :param routes (dict): Dictionary of route handlers.
     """
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # Allows the socket to reuse the address immediately
 
     try:
         server.bind((ip, port))
@@ -85,15 +86,12 @@ def run_backend(ip, port, routes):
 
         while True:
             conn, addr = server.accept()
-            #
-            #  TODO: implement the step of the client incomping connection
-            #        using multi-thread programming with the
-            #        provided handle_client routine
-            #
             client_thread = threading.Thread(target=handle_client, args=(ip, port, conn, addr, routes))
             client_thread.start()
     except socket.error as e:
-      print("Socket error: {}".format(e))
+        print("Socket error: {}".format(e))
+    except KeyboardInterrupt:
+        print("\n| SHUTTING DOWN... |")
 
 def create_backend(ip, port, routes={}):
     """
