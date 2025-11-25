@@ -33,14 +33,9 @@ from .response import *
 from .httpadapter import HttpAdapter
 from .dictionary import CaseInsensitiveDict
 
-#: A dictionary mapping hostnames to backend IP and port tuples.
-#: Used to determine routing targets for incoming requests.
-PROXY_PASS = {
-    "192.168.56.103:8080": ('192.168.56.103', 9000),
-    "app1.local": ('192.168.56.103', 9001),
-    "app2.local": ('192.168.56.103', 9002),
-}
-
+#: Counter for round-robin load balancing
+#: Maps hostname to current backend index
+ROUND_ROBIN_COUNTER = {}
 
 def forward_request(host, port, request):
     """
@@ -88,10 +83,10 @@ def resolve_routing_policy(hostname, routes):
     :params routes (dict): dictionary mapping hostnames and location.
     """
 
-    print(hostname)
+    print(f"[Host name] {hostname}")
     proxy_map, policy = routes.get(hostname,('127.0.0.1:9000','round-robin'))
-    print (proxy_map)
-    print (policy)
+    print (f"[Map] {proxy_map}")
+    print (f"[Policy] {policy}")
 
     proxy_host = ''
     proxy_port = '9000'
@@ -99,21 +94,28 @@ def resolve_routing_policy(hostname, routes):
         if len(proxy_map) == 0:
             print("[Proxy] Emtpy resolved routing of hostname {}".format(hostname))
             print ("Empty proxy_map result")
-            # TODO: implement the error handling for non mapped host
-            #       the policy is design by team, but it can be 
-            #       basic default host in your self-defined system
-            # Use a dummy host to raise an invalid connection
             proxy_host = '127.0.0.1'
             proxy_port = '9000'
         elif len(proxy_map) == 1:
             proxy_host, proxy_port = proxy_map[0].split(":", 2)
-        #elif: # apply the policy handling
-        #   proxy_map
-        #   policy
         else:
-            # Out-of-handle mapped host
-            proxy_host = '127.0.0.1'
-            proxy_port = '9000'
+            # Multiple backends - apply distribution policy
+            if policy == 'round-robin':
+                # Round-robin: rotate through backends sequentially
+                if hostname not in ROUND_ROBIN_COUNTER:
+                    ROUND_ROBIN_COUNTER[hostname] = 0
+                
+                index = ROUND_ROBIN_COUNTER[hostname] % len(proxy_map)
+                proxy_host, proxy_port = proxy_map[index].split(":", 2)
+                
+                # Increment for next request
+                ROUND_ROBIN_COUNTER[hostname] += 1
+                print("[Proxy] Round-robin: select backend {}/{} -> {}:{} from host {}".format(
+                    index + 1, len(proxy_map), proxy_host, proxy_port, hostname))
+            else:
+                # Unknown policy - use first backend as fallback
+                print("[Proxy] Unknown policy '{}', using first backend".format(policy))
+                proxy_host, proxy_port = proxy_map[0].split(":", 2)
     else:
         print("[Proxy] resolve route of hostname {} is a singulair to".format(hostname))
         proxy_host, proxy_port = proxy_map.split(":", 2)
@@ -148,26 +150,42 @@ def handle_client(ip, port, conn, addr, routes):
 
     print("[Proxy] {} at Host: {}".format(addr, hostname))
 
-    # Resolve the matching destination in routes and need conver port
-    # to integer value
-    resolved_host, resolved_port = resolve_routing_policy(hostname, routes)
-    try:
-        resolved_port = int(resolved_port)
-    except ValueError:
-        print("Not a valid integer")
-
-    if resolved_host:
-        print("[Proxy] Host name {} is forwarded to {}:{}".format(hostname,resolved_host, resolved_port))
-        response = forward_request(resolved_host, resolved_port, request)        
-    else:
+    # Get backend configuration
+    proxy_map, policy = routes.get(hostname, ('127.0.0.1:9000', 'round-robin'))
+    backends = proxy_map if isinstance(proxy_map, list) else [proxy_map]
+    
+    response = None
+    
+    # Try backends until one succeeds
+    for backend in range(len(backends)):
+        resolved_host, resolved_port = resolve_routing_policy(hostname, routes)
+        try:
+            resolved_port = int(resolved_port)
+        except ValueError:
+            print("Not a valid integer")
+            continue
+        
+        print("[Proxy] Host name {} is forwarded to {}:{}".format(hostname, resolved_host, resolved_port))
+        response = forward_request(resolved_host, resolved_port, request)
+        
+        # If backend is up (not 404), use this response
+        if response and not response.startswith(b"HTTP/1.1 404"):
+            print("[Proxy] Success: {}:{}".format(resolved_host, resolved_port))
+            break
+        else:
+            print("[Proxy] Backend {}:{} is down, trying next...".format(resolved_host, resolved_port))
+    
+    # If all backends failed, return 502
+    if response is None or response.startswith(b"HTTP/1.1 404"):
         response = (
-            "HTTP/1.1 404 Not Found\r\n"
+            "HTTP/1.1 502 Bad Gateway\r\n"
             "Content-Type: text/plain\r\n"
-            "Content-Length: 13\r\n"
+            "Content-Length: 15\r\n"
             "Connection: close\r\n"
             "\r\n"
-            "404 Not Found"
+            "502 Bad Gateway"
         ).encode('utf-8')
+
     conn.sendall(response)
     conn.close()
 
@@ -187,6 +205,7 @@ def run_proxy(ip, port, routes):
     """
 
     proxy = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    proxy.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # Allows the socket to reuse the address immediately
 
     try:
         proxy.bind((ip, port))
@@ -194,15 +213,12 @@ def run_proxy(ip, port, routes):
         print("[Proxy] Listening on IP {} port {}".format(ip,port))
         while True:
             conn, addr = proxy.accept()
-            #
-            #  TODO: implement the step of the client incomping connection
-            #        using multi-thread programming with the
-            #        provided handle_client routine
-            #
             client_thread = threading.Thread(target=handle_client, args=(ip, port, conn, addr, routes))
             client_thread.start()
     except socket.error as e:
-      print("Socket error: {}".format(e))
+        print("Socket error: {}".format(e))
+    except KeyboardInterrupt:
+        print ("\n| SHUTTING DOWN... |")
 
 def create_proxy(ip, port, routes):
     """
