@@ -96,93 +96,97 @@ def api_peers(headers, body):
 
 @app.route('/api/chat', methods=['POST'])
 def api_chat_messages(headers, body):
-    peer_id = app.config.get('peer_id')
-    if peer_id is None:
-        return json.dumps({'status': 'error', 'message': 'Peer not registered'})
-    
-    peer_id = int(peer_id)
-    data = json.loads(body) if body else {}
-    
-    channel_id = data.get('channel_id')
-    if channel_id:
-        chat_key = f"channel_{channel_id}"
-        return json.dumps({'status': 'success', 'messages': messages.get(chat_key, [])})
+    try:
+        peer_id = app.config.get('peer_id')
+        
+        peer_id = int(peer_id)
+        data = json.loads(body) if body else {}
+        
+        channel_id = data.get('channel_id')
+        if channel_id:
+            chat_key = f"channel_{channel_id}"
+            return json.dumps({'status': 'success', 'messages': messages.get(chat_key, [])})
 
-    target_peer_id = data.get('peer_id')
-    
-    if target_peer_id is None:
-        return json.dumps({'status': 'error', 'message': 'peer_id required'})
-    
-    target_peer_id = int(target_peer_id)
-    chat_key = get_chat_key(peer_id, target_peer_id)
-    return json.dumps({'status': 'success', 'messages': messages.get(chat_key, [])})
+        target_peer_id = data.get('peer_id')
+        
+        target_peer_id = int(target_peer_id)
+        chat_key = get_chat_key(peer_id, target_peer_id)
+        return json.dumps({'status': 'success', 'messages': messages.get(chat_key, [])})
+    except Exception as e:
+        return json.dumps({'status': 'error', 'error': str(e)})
 
 @app.route('/api/send', methods=['POST'])
 def api_send(headers, body):
-    data = json.loads(body)
-    message = data.get('message', '')
-    target_peer_id = data.get('target_peer_id')
-    channel_id = data.get('channel_id')
-    peer_id = app.config.get('peer_id')
-    
-    peer_id = int(peer_id)
-    if target_peer_id is not None:
-        target_peer_id = int(target_peer_id)
-    
-    msg_data = {
-        'from': peer_id,
-        'data': message,
-        'timestamp': datetime.now().isoformat()
-    }
-    
-    timestamp = msg_data['timestamp']
-    
-    if channel_id:
-        # Channel Message
-        chat_key = f"channel_{channel_id}"
-        save_message(chat_key, peer_id, message, timestamp)
+    try:
+        data = json.loads(body)
+        message = data.get('message', '')
+        target_peer_id = data.get('target_peer_id')
+        channel_id = data.get('channel_id')
+        peer_id = app.config.get('peer_id')
         
-        msg_data['channel_id'] = channel_id
-        peers = get_peer_list()
-        for peer in peers:
-            if peer.get('peer_id') != peer_id:
-                send_to_peer(peer['ip'], peer['port'], msg_data)
-
-    elif target_peer_id is not None:
-        # Direct Message
-        chat_key = get_chat_key(peer_id, target_peer_id)
-        save_message(chat_key, peer_id, message, timestamp)
-
-        peers = get_peer_list()
-        if target_peer_id != peer_id:
+        peer_id = int(peer_id)
+        if target_peer_id is not None:
+            target_peer_id = int(target_peer_id)
+        
+        msg_data = {
+            'from': peer_id,
+            'data': message,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        timestamp = msg_data['timestamp']
+        
+        if channel_id:
+            # Channel Message
+            chat_key = f"channel_{channel_id}"
+            save_message(chat_key, peer_id, message, timestamp)
+            
+            msg_data['channel_id'] = channel_id
+            peers = get_peer_list()
             for peer in peers:
-                if peer.get('peer_id') == target_peer_id:
+                if peer.get('peer_id') != peer_id:
                     send_to_peer(peer['ip'], peer['port'], msg_data)
-                    break
-    else:
-        # Broadcast
-        peers = get_peer_list()
-        for peer in peers:
-            if peer.get('peer_id') != peer_id:
-                chat_key = get_chat_key(peer_id, peer['peer_id'])
-                save_message(chat_key, peer_id, message, timestamp)
-                send_to_peer(peer['ip'], peer['port'], msg_data)
-    
-    return json.dumps({'status': 'success'})
+
+        elif target_peer_id is not None:
+            # Direct Message
+            chat_key = get_chat_key(peer_id, target_peer_id)
+            save_message(chat_key, peer_id, message, timestamp)
+
+            peers = get_peer_list()
+            if target_peer_id != peer_id:
+                for peer in peers:
+                    if peer.get('peer_id') == target_peer_id:
+                        send_to_peer(peer['ip'], peer['port'], msg_data)
+                        break
+        else:
+            # Broadcast
+            peers = get_peer_list()
+            for peer in peers:
+                if peer.get('peer_id') != peer_id:
+                    chat_key = get_chat_key(peer_id, peer['peer_id'])
+                    save_message(chat_key, peer_id, message, timestamp)
+                    send_to_peer(peer['ip'], peer['port'], msg_data)
+            return json.dumps({'status': 'success'})
+        
+    except Exception as e:
+        return json.dumps({'status': 'error', 'error': str(e)})
 
 @app.route('/send-peer', methods=['POST'])
 def receive_message(headers, body):
-    data = json.loads(body)
-    peer_id = app.config.get('peer_id')
-    
-    peer_id = int(peer_id)
-    from_peer_id = int(data['from'])
-    
-    channel_id = data.get('channel_id')
-    if channel_id:
-        chat_key = f"channel_{channel_id}"
-    else:
-        chat_key = get_chat_key(peer_id, from_peer_id)
+    try:
+        data = json.loads(body)
+        peer_id = app.config.get('peer_id')
         
-    save_message(chat_key, from_peer_id, data['data'], data.get('timestamp', datetime.now().isoformat()))
-    return json.dumps({'status': 'success'})
+        peer_id = int(peer_id)
+        from_peer_id = int(data['from'])
+        
+        channel_id = data.get('channel_id')
+        if channel_id:
+            chat_key = f"channel_{channel_id}"
+        else:
+            chat_key = get_chat_key(peer_id, from_peer_id)
+            
+        save_message(chat_key, from_peer_id, data['data'], data.get('timestamp', datetime.now().isoformat()))
+        return json.dumps({'status': 'success'})
+    except Exception as e:
+        return json.dumps({'status': 'error', 'error': str(e)})
