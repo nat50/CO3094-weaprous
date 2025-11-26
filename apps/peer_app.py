@@ -102,6 +102,12 @@ def api_chat_messages(headers, body):
     
     peer_id = int(peer_id)
     data = json.loads(body) if body else {}
+    
+    channel_id = data.get('channel_id')
+    if channel_id:
+        chat_key = f"channel_{channel_id}"
+        return json.dumps({'status': 'success', 'messages': messages.get(chat_key, [])})
+
     target_peer_id = data.get('peer_id')
     
     if target_peer_id is None:
@@ -116,6 +122,7 @@ def api_send(headers, body):
     data = json.loads(body)
     message = data.get('message', '')
     target_peer_id = data.get('target_peer_id')
+    channel_id = data.get('channel_id')
     peer_id = app.config.get('peer_id')
     
     peer_id = int(peer_id)
@@ -130,7 +137,18 @@ def api_send(headers, body):
     
     timestamp = msg_data['timestamp']
     
-    if target_peer_id is not None:
+    if channel_id:
+        # Channel Message
+        chat_key = f"channel_{channel_id}"
+        save_message(chat_key, peer_id, message, timestamp)
+        
+        msg_data['channel_id'] = channel_id
+        peers = get_peer_list()
+        for peer in peers:
+            if peer.get('peer_id') != peer_id:
+                send_to_peer(peer['ip'], peer['port'], msg_data)
+
+    elif target_peer_id is not None:
         # Direct Message
         chat_key = get_chat_key(peer_id, target_peer_id)
         save_message(chat_key, peer_id, message, timestamp)
@@ -159,6 +177,12 @@ def receive_message(headers, body):
     
     peer_id = int(peer_id)
     from_peer_id = int(data['from'])
-    chat_key = get_chat_key(peer_id, from_peer_id)
+    
+    channel_id = data.get('channel_id')
+    if channel_id:
+        chat_key = f"channel_{channel_id}"
+    else:
+        chat_key = get_chat_key(peer_id, from_peer_id)
+        
     save_message(chat_key, from_peer_id, data['data'], data.get('timestamp', datetime.now().isoformat()))
     return json.dumps({'status': 'success'})

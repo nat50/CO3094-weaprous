@@ -130,6 +130,9 @@
     <div class="sidebar">
         <h2>Peers</h2>
         <div class="broadcast-btn" onclick="selectBroadcast()">📢 Broadcast</div>
+        <div class="peer-item" onclick="selectChannel(1)"># Channel 1</div>
+        <div class="peer-item" onclick="selectChannel(2)"># Channel 2</div>
+        <div class="peer-item" onclick="selectChannel(3)"># Channel 3</div>
         <div id="peerList">Loading...</div>
     </div>
     
@@ -137,7 +140,7 @@
         <div class="header" id="header" style="display:none;">
             Chat with: <span id="currentPeerName"></span>
         </div>
-        <div class="empty" id="empty">Select a peer to start chatting</div>
+        <div class="empty" id="empty">Select a peer or channel to start chatting</div>
         <div class="messages" id="messages" style="display:none;"></div>
         <div class="input-area" id="inputArea" style="display:none;">
             <input type="text" id="messageInput" placeholder="Type message..." onkeypress="if(event.key==='Enter') sendMessage()">
@@ -194,6 +197,9 @@
                 if (savedPeer === 'broadcast') {
                     currentPeer = 'broadcast';
                     showChat('Broadcast');
+                } else if (savedPeer.startsWith('channel_')) {
+                    var channelId = savedPeer.split('_')[1];
+                    selectChannel(channelId);
                 } else {
                     var peerId = parseInt(savedPeer);
                     var allPeers = document.querySelectorAll('.peer-item');
@@ -222,6 +228,13 @@
             }
             if (currentPeer === 'broadcast') {
                 document.querySelector('.broadcast-btn').style.background = '#45a049';
+            } else if (typeof currentPeer === 'string' && currentPeer.startsWith('channel_')) {
+                var cId = currentPeer.split('_')[1];
+                for (var i = 0; i < allPeers.length; i++) {
+                    if (allPeers[i].textContent.includes('# Channel ' + cId)) {
+                        allPeers[i].classList.add('active');
+                    }
+                }
             } else {
                 for (var i = 0; i < allPeers.length; i++) {
                     if (allPeers[i].textContent.includes('Peer ' + currentPeer)) {
@@ -235,6 +248,12 @@
             currentPeer = 'broadcast';
             localStorage.setItem('currentPeer', 'broadcast');
             showChat('Broadcast');
+        }
+
+        function selectChannel(id) {
+            currentPeer = 'channel_' + id;
+            localStorage.setItem('currentPeer', currentPeer);
+            showChat('Channel ' + id);
         }
 
         function selectPeer(peerId) {
@@ -262,7 +281,14 @@
                 return;
             }
 
-            callAPI('/api/chat', 'POST', {peer_id: currentPeer}, function(result) {
+            var data = {};
+            if (typeof currentPeer === 'string' && currentPeer.startsWith('channel_')) {
+                data.channel_id = currentPeer.split('_')[1];
+            } else {
+                data.peer_id = currentPeer;
+            }
+
+            callAPI('/api/chat', 'POST', data, function(result) {
                 displayMessages(result);
             });
         }
@@ -299,12 +325,14 @@
                 if (savedPeer) {
                     if (savedPeer === 'broadcast') {
                         currentPeer = 'broadcast';
+                    } else if (savedPeer.startsWith('channel_')) {
+                        currentPeer = savedPeer;
                     } else {
                         currentPeer = parseInt(savedPeer);
                     }
-                    showChat(savedPeer === 'broadcast' ? 'Broadcast' : 'Peer ' + currentPeer);
+                    showChat(savedPeer === 'broadcast' ? 'Broadcast' : (savedPeer.startsWith('channel_') ? 'Channel ' + savedPeer.split('_')[1] : 'Peer ' + currentPeer));
                 } else {
-                    alert('Please select a peer first');
+                    alert('Please select a peer or channel first');
                     return;
                 }
             }
@@ -313,7 +341,12 @@
             if (message === '') return;
 
             var data = {message: message};
-            if (currentPeer !== 'broadcast') {
+            
+            if (currentPeer === 'broadcast') {
+                // No target_peer_id means broadcast
+            } else if (typeof currentPeer === 'string' && currentPeer.startsWith('channel_')) {
+                data.channel_id = currentPeer.split('_')[1];
+            } else {
                 data.target_peer_id = currentPeer;
             }
 
