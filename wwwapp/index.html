@@ -87,6 +87,10 @@
             background: #38488f;
             color: white;
         }
+        .peer-item.notification {
+            background: #ffeb3b;
+            color: black;
+        }
         .broadcast-btn {
             background: #4CAF50;
             color: white;
@@ -128,7 +132,7 @@
 </head>
 <body>
     <div class="sidebar">
-        <h2>Peers</h2>
+        <h2>Peers <span id="my-id" style="font-size: 14px; color: #666;"></span></h2>
         <div class="broadcast-btn" onclick="selectBroadcast()">📢 Broadcast</div>
         <div class="peer-item" onclick="selectChannel(1)"># Channel 1</div>
         <div class="peer-item" onclick="selectChannel(2)"># Channel 2</div>
@@ -179,7 +183,11 @@
                 if (result && result.peers && result.peers.length > 0) {
                     for (var i = 0; i < result.peers.length; i++) {
                         var peer = result.peers[i];
-                        html += '<div class="peer-item" onclick="selectPeer(' + peer.peer_id + ')">Peer ' + peer.peer_id + '</div>';
+                        var cls = '';
+                        if (peer.unread) {
+                            cls = ' notification';
+                        }
+                        html += '<div class="peer-item' + cls + '" onclick="selectPeer(' + peer.peer_id + ')">Peer ' + peer.peer_id + '</div>';
                     }
                 } else {
                     html = '<div>No peers</div>';
@@ -259,6 +267,14 @@
         function selectPeer(peerId) {
             currentPeer = parseInt(peerId);
             localStorage.setItem('currentPeer', peerId);
+            
+            var allPeers = document.querySelectorAll('.peer-item');
+            for (var i = 0; i < allPeers.length; i++) {
+                 if (allPeers[i].textContent.includes('Peer ' + peerId)) {
+                     allPeers[i].classList.remove('notification');
+                 }
+            }
+            
             showChat('Peer ' + peerId);
         }
 
@@ -275,21 +291,22 @@
         function loadMessages() {
             if (!currentPeer) return;
 
-            if (currentPeer === 'broadcast') {
-                var messagesDiv = document.getElementById('messages');
-                messagesDiv.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">Chat to everyone</div>';
-                return;
-            }
-
             var data = {};
-            if (typeof currentPeer === 'string' && currentPeer.startsWith('channel_')) {
+            if (currentPeer === 'broadcast') {
+                data.broadcast = true;
+            } else if (typeof currentPeer === 'string' && currentPeer.startsWith('channel_')) {
                 data.channel_id = currentPeer.split('_')[1];
             } else {
                 data.peer_id = currentPeer;
             }
 
             callAPI('/api/chat', 'POST', data, function(result) {
-                displayMessages(result);
+                if (currentPeer === 'broadcast') {
+                    var messagesDiv = document.getElementById('messages');
+                    messagesDiv.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">Chat to everyone</div>';
+                } else {
+                    displayMessages(result);
+                }
             });
         }
 
@@ -366,6 +383,7 @@
             callAPI('/api/me', 'GET', null, function(result) {
                 if (result) {
                     myPeerId = parseInt(result.peer_id);
+                    document.getElementById('my-id').textContent = myPeerId;
                 }
             });
         }

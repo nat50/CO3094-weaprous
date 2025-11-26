@@ -4,6 +4,8 @@ from datetime import datetime
 from daemon import *
 
 messages = {}
+unread_chats = set()
+active_chat_peer = None
 app = WeApRous()
 app.config = {}
 
@@ -92,6 +94,10 @@ def api_peers(headers, body):
         peer_id = int(peer_id)
     all_peers = get_peer_list()
     filtered_peers = [p for p in all_peers if p.get('peer_id') != peer_id]
+    
+    for p in filtered_peers:
+        p['unread'] = p['peer_id'] in unread_chats
+
     return json.dumps({'status': 'success', 'peers': filtered_peers})
 
 @app.route('/api/chat', methods=['POST'])
@@ -102,6 +108,9 @@ def api_chat_messages(headers, body):
         peer_id = int(peer_id)
         data = json.loads(body) if body else {}
         
+        global active_chat_peer
+        active_chat_peer = None
+        
         channel_id = data.get('channel_id')
         if channel_id:
             chat_key = f"channel_{channel_id}"
@@ -109,9 +118,16 @@ def api_chat_messages(headers, body):
 
         target_peer_id = data.get('peer_id')
         
-        target_peer_id = int(target_peer_id)
-        chat_key = get_chat_key(peer_id, target_peer_id)
-        return json.dumps({'status': 'success', 'messages': messages.get(chat_key, [])})
+        if target_peer_id is not None:
+            target_peer_id = int(target_peer_id)
+            active_chat_peer = target_peer_id
+            if target_peer_id in unread_chats:
+                unread_chats.remove(target_peer_id)
+                
+            chat_key = get_chat_key(peer_id, target_peer_id)
+            return json.dumps({'status': 'success', 'messages': messages.get(chat_key, [])})
+            
+        return json.dumps({'status': 'success', 'messages': []})
     except Exception as e:
         return json.dumps({'status': 'error', 'error': str(e)})
 
@@ -166,7 +182,7 @@ def api_send(headers, body):
                     chat_key = get_chat_key(peer_id, peer['peer_id'])
                     save_message(chat_key, peer_id, message, timestamp)
                     send_to_peer(peer['ip'], peer['port'], msg_data)
-            return json.dumps({'status': 'success'})
+        return json.dumps({'status': 'success'})
         
     except Exception as e:
         return json.dumps({'status': 'error', 'error': str(e)})
@@ -181,6 +197,10 @@ def receive_message(headers, body):
         from_peer_id = int(data['from'])
         
         channel_id = data.get('channel_id')
+        
+        if not channel_id and active_chat_peer != from_peer_id:
+            unread_chats.add(from_peer_id)
+        
         if channel_id:
             chat_key = f"channel_{channel_id}"
         else:
