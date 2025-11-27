@@ -135,19 +135,20 @@ class Response():
         return mime_type or 'application/octet-stream'
 
 
-    def prepare_content_type(self, mime_type='text/html'):
+    def prepare_content_type(self, mime_type='text/html', base_dir='wwwapp/'):
         """
         Prepares the Content-Type header and determines the base directory
         for serving the file based on its MIME type.
 
         :params mime_type (str): MIME type of the requested resource.
+        :params base_dir (str): Default base directory for HTML files.
 
         :rtype str: Base directory path for locating the resource.
 
         :raises ValueError: If the MIME type is unsupported.
         """
         
-        base_dir = ""
+        result_dir = ""
 
         # Processing mime_type based on main_type and sub_type
         main_type, sub_type = mime_type.split('/', 1)
@@ -155,24 +156,24 @@ class Response():
         if main_type == 'text':
             self.headers['Content-Type']='text/{}'.format(sub_type)
             if sub_type == 'plain' or sub_type == 'css':
-                base_dir = BASE_DIR+"static/"
+                result_dir = BASE_DIR+"static/"
             elif sub_type == 'html':
-                base_dir = BASE_DIR+"www/"
+                result_dir = base_dir  # Use parameter instead of hardcoded www/
             else:
-                handle_text_other(sub_type)
+                result_dir = BASE_DIR+"static/"
         elif main_type == 'image':
             if sub_type == 'x-icon':
-                base_dir = BASE_DIR+"static/images"
+                result_dir = BASE_DIR+"static/images"
             else:
-                base_dir = BASE_DIR+"static/"
+                result_dir = BASE_DIR+"static/"
             self.headers['Content-Type']='image/{}'.format(sub_type)
         elif main_type == 'application':
-            base_dir = BASE_DIR+"apps/"
+            result_dir = BASE_DIR+"apps/"
             self.headers['Content-Type']='application/{}'.format(sub_type)
         else:
             raise ValueError("Invalid MEME type: main_type={} sub_type={}".format(main_type,sub_type))
 
-        return base_dir
+        return result_dir
 
 
     def build_content(self, path, base_dir):
@@ -282,6 +283,22 @@ class Response():
             "\r\n"
             "401 Unauthorized"
         ).encode('utf-8')
+    
+    def build_redirect_to_login(self):
+        """
+        Constructs a 302 redirect to the login page.
+        
+        :rtype bytes: Encoded 302 response.
+        """
+        print("[Response] Sending 302 Redirect to /login")
+        return (
+            "HTTP/1.1 302 Found\r\n"
+            "Location: /login\r\n"
+            "Content-Length: 0\r\n"
+            "Cache-Control: no-store\r\n"
+            "Connection: close\r\n"
+            "\r\n"
+        ).encode('utf-8')
         
     def build_found(self):
         """
@@ -311,7 +328,20 @@ class Response():
     def build_app_response(self, request):
         """
         Build response for app routes with hook result.
+        Checks authentication unless it's a public tracker endpoint.
         """
+        # Public endpoints that don't require authentication (tracker endpoints)
+        public_endpoints = ['/submit-info', '/get-list']
+        
+        # Check if this is a public endpoint
+        if request.path not in public_endpoints:
+            # API routes also need authentication
+            cookies = request.cookies
+            if cookies.get('auth', '') != 'true':
+                print("[Response] API route requires authentication")
+                return self.build_unauthorized()
+        
+        # Build and return JSON response
         self._content = self.result.encode('utf-8')
         self.status_code = 200
         self.reason = 'OK'
@@ -331,33 +361,48 @@ class Response():
         path = request.path
 
         mime_type = self.get_mime_type(path)
-        print("[Response] {} path {} mime_type {}".format(request.method, request.path, mime_type))
+        print("[Response] Method {} - path {} - mime_type {}".format(request.method, request.path, mime_type))
 
         base_dir = ""
         
-        if self.result:
+        # API routes that return JSON - return immediately
+        if self.result and self.result is not None:
             return self.build_app_response(request)
         
-        if path == '/login':
+        # Login pages - always accessible without authentication
+        if path == '/login' or path == '/login.html':
             if request.method == 'GET':
+                # Serve login page without authentication
                 path = '/login.html'
-                base_dir = self.prepare_content_type(mime_type = 'text/html')
+                base_dir = self.prepare_content_type(mime_type='text/html', base_dir='wwwapp/')
             elif request.method == 'POST':
+                # Check login credentials
                 if not self.check_login(request.body):
                     return self.build_unauthorized()
                 else:
-                    return self.build_found()
-        #If HTML, parse and serve embedded objects
-        elif path.endswith('.html') or mime_type == 'text/html':
-            if request.routes:
-                base_dir = "wwwapp/"
-                self.headers['Content-Type'] = 'text/html'
+                    # Valid login: serve index.html with Set-Cookie header
+                    path = '/index.html'
+                    self.headers['Set-Cookie'] = 'auth=true; Path=/; HttpOnly'
+                    base_dir = self.prepare_content_type(mime_type='text/html', base_dir='wwwapp/')
+                    # Continue to build and return the page below
+        # Handle root path or /index.html - requires authentication
+        elif path == '/' or path == '/index.html':
+            path = '/index.html'
+            # Check authentication cookie
+            cookies = request.cookies
+            if cookies.get('auth', '') == 'true':
+                base_dir = self.prepare_content_type(mime_type='text/html', base_dir='wwwapp/')
             else:
-                cookies = request.cookies
-                if cookies.get('auth', '')=='true':
-                    base_dir = self.prepare_content_type(mime_type = 'text/html')
-                else:
-                    return self.build_unauthorized()
+                # Not authenticated - redirect to login page
+                print("[Response] No auth cookie - redirecting to login")
+                return self.build_redirect_to_login()
+        # Other HTML files - check authentication
+        elif path.endswith('.html') or mime_type == 'text/html':
+            cookies = request.cookies
+            if cookies.get('auth', '') == 'true':
+                base_dir = self.prepare_content_type(mime_type='text/html', base_dir='wwwapp/')
+            else:
+                return self.build_unauthorized()
         elif mime_type == 'text/css':
             base_dir = self.prepare_content_type(mime_type = 'text/css')
         #

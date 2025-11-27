@@ -87,6 +87,7 @@ def run_backend(ip, port, routes):
         while True:
             conn, addr = server.accept()
             client_thread = threading.Thread(target=handle_client, args=(ip, port, conn, addr, routes))
+            client_thread.daemon = True
             client_thread.start()
     except socket.error as e:
         print("Socket error: {}".format(e))

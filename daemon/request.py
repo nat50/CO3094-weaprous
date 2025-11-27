@@ -101,14 +101,22 @@ class Request():
             self.hook = routes.get((self.method, self.path))
 
         self.headers = self.prepare_headers(request)
-        cookies = self.headers.get('cookie', '')
+        # Cookie header can be 'Cookie' or 'cookie' - make it case-insensitive
+        cookies = ''
+        for header_key in self.headers:
+            if header_key.lower() == 'cookie':
+                cookies = self.headers[header_key]
+                break
+        
         self.cookies = CaseInsensitiveDict()
         if cookies:
+            # Parse cookies: format is "key1=value1; key2=value2"
             for pair in cookies.split(";"):
                 pair = pair.strip()
                 if '=' in pair:
                     key, value = pair.split("=", 1)
-                    self.cookies[key] = value
+                    # Strip whitespace from key and value
+                    self.cookies[key.strip()] = value.strip()
             print("[Request] Cookies: {}".format(dict(self.cookies)))
         else:
             print("[Request] No cookies found")
