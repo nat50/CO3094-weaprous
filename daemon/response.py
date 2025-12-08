@@ -338,10 +338,24 @@ class Response():
         if self.result:
             return self.build_app_response(request)
         
+        # Check if request has routes (Task 2) and trying to access HTML without auth
+        # This applies to both / and /index.html and any HTML page
+        if request.routes and (path.endswith('.html') or path == '/index.html' or mime_type == 'text/html'):
+            if path != '/login' and path != '/login.html':
+                # Check authentication for any HTML page except login
+                cookies = request.cookies
+                if cookies.get('auth', '') != 'true':
+                    return self.build_unauthorized()
+        
         if path == '/login':
             if request.method == 'GET':
                 path = '/login.html'
-                base_dir = self.prepare_content_type(mime_type = 'text/html')
+                # Use wwwapp for Task 2 (routes exist), www for Task 1 (no routes)
+                if request.routes:
+                    base_dir = "wwwapp/"
+                    self.headers['Content-Type'] = 'text/html'
+                else:
+                    base_dir = self.prepare_content_type(mime_type = 'text/html')
             elif request.method == 'POST':
                 if not self.check_login(request.body):
                     return self.build_unauthorized()
@@ -349,15 +363,17 @@ class Response():
                     return self.build_found()
         #If HTML, parse and serve embedded objects
         elif path.endswith('.html') or mime_type == 'text/html':
-            if request.routes:
-                base_dir = "wwwapp/"
-                self.headers['Content-Type'] = 'text/html'
-            else:
-                cookies = request.cookies
-                if cookies.get('auth', '')=='true':
-                    base_dir = self.prepare_content_type(mime_type = 'text/html')
+            # Check authentication (same logic for both tasks)
+            cookies = request.cookies
+            if cookies.get('auth', '')=='true':
+                if request.routes:
+                    # Use wwwapp for Task 2 (routes exist), www for Task 1 (no routes)
+                    base_dir = "wwwapp/"
+                    self.headers['Content-Type'] = 'text/html'
                 else:
-                    return self.build_unauthorized()
+                    base_dir = self.prepare_content_type(mime_type = 'text/html')
+            else:
+                return self.build_unauthorized()
         elif mime_type == 'text/css':
             base_dir = self.prepare_content_type(mime_type = 'text/css')
         #
