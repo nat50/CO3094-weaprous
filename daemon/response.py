@@ -291,7 +291,7 @@ class Response():
         return (
             "HTTP/1.1 302 Found\r\n"
             "Location: /\r\n"
-            "Set-Cookie: auth=true; Path=/; HttpOnly\r\n"
+            "Set-Cookie: auth=true; Path=/\r\n"
             "Content-Length: 0\r\n"
             "Connection: close\r\n"
             "\r\n"
