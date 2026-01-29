@@ -104,5 +104,4 @@ Endpoints:
 - `PUT /hello`
 
 ## Notes
-- If you want to use virtual hosts like `app1.local`, add them to your OS hosts file and update `config/proxy.conf`.
 - The server serves HTML from `www/` (Task 1) and from `wwwapp/` (Task 2 with routes enabled).
