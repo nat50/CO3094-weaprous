@@ -17,5 +17,30 @@
   
        <img src="images/welcome.png" alt="bksysnet at HCMUT" width="500" height="600">  
 </div>
+    <h2>Cookies for this page:</h2>
+    <!-- This is where the cookies will be displayed -->
+    <p id="cookieDisplayArea"></p>
+
+    <script>
+        // Function to read all cookies and display them
+        function displayAllCookies() {
+            // The document.cookie property returns all cookies as a single
+            // semicolon-separated string (e.g., "name1=value1; name2=value2; ...")
+            var allCookies = document.cookie;
+            
+            // Get the HTML element by its ID
+            var displayArea = document.getElementById("cookieDisplayArea");
+            
+            // Set the innerHTML of the element to the cookie string
+            if (allCookies) {
+                displayArea.innerHTML = allCookies;
+            } else {
+                displayArea.innerHTML = "No cookies found for this page.";
+            }
+        }
+
+        // Call the function to display cookies when the page loads
+        displayAllCookies();
+    </script>
 </body>
 </html>
